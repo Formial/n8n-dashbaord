@@ -1,0 +1,26 @@
+{
+  "name": "formial-creative-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.mjs",
+    "tunnel": "node scripts/start-tunnel.mjs",
+    "connect:n8n": "node scripts/configure-n8n.mjs",
+    "test": "node --test test/*.test.mjs",
+    "workflow": "node scripts/adapt-workflow.mjs",
+    "workflow:mongodb": "node scripts/adapt-mongodb-workflow.mjs",
+    "db:check": "node --env-file-if-exists=.env scripts/check-mongodb.mjs",
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate-mongodb.mjs"
+  },
+  "dependencies": {
+    "archiver": "^8.0.0",
+    "mongodb": "^7.7.0"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^11.3.0"
+  }
+}

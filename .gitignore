@@ -1,0 +1,7 @@
+.env*
+!.env.example
+data/
+node_modules/
+.vercel/
+.tools/
+.runtime/
