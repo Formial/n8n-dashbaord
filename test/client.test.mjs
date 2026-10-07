@@ -6,7 +6,7 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
 import vm from 'node:vm';
-import { createApp } from '../server.mjs';
+import { createApp } from '../dashboard-server.mjs';
 import { png } from './fixtures.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)),'..');

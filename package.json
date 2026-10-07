@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "start": "node --env-file-if-exists=.env server.mjs",
+    "start": "node --env-file-if-exists=.env dashboard-server.mjs",
     "tunnel": "node scripts/start-tunnel.mjs",
     "connect:n8n": "node scripts/configure-n8n.mjs",
     "test": "node --test test/*.test.mjs",

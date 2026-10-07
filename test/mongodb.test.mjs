@@ -6,7 +6,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { connectMongo, digest, APP_MARKER } from '../storage.mjs';
-import { createApp } from '../server.mjs';
+import { createApp } from '../dashboard-server.mjs';
 import { CHUNK_BYTES } from '../transfers.mjs';
 import { defaults } from '../lib.mjs';
 import { png, review } from './fixtures.mjs';

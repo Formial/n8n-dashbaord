@@ -1,4 +1,4 @@
-import { createApp } from '../server.mjs';
+import { createApp } from '../dashboard-server.mjs';
 
 let app;
 export default async function handler(request, response) {

@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import http from 'node:http';
 import { once } from 'node:events';
-import { createApp } from '../server.mjs';
+import { createApp } from '../dashboard-server.mjs';
 import { defaults, crc32 } from '../lib.mjs';
 import { png, review } from './fixtures.mjs';
 

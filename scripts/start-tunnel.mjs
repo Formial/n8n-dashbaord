@@ -48,7 +48,7 @@ async function stopDashboard() {
   await new Promise(resolve => { child.once('exit', resolve); child.kill(); });
 }
 async function startDashboard() {
-  dashboard = spawn(process.execPath, ['server.mjs'], { cwd: root, env: { ...process.env, ...values }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  dashboard = spawn(process.execPath, ['dashboard-server.mjs'], { cwd: root, env: { ...process.env, ...values }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   dashboard.stdout.on('data', data => record(data.toString().trim()));
   dashboard.stderr.on('data', data => record(data.toString().trim()));
   dashboard.on('error', error => record('Dashboard startup error: ' + error.message));
