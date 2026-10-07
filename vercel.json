@@ -1,5 +1,7 @@
 {
   "version": 2,
+  "framework": null,
+  "buildCommand": "",
   "outputDirectory": "public",
   "rewrites": [{ "source": "/api/:path*", "destination": "/api/index?route=:path*" }],
   "functions": { "api/index.mjs": { "maxDuration": 120, "includeFiles": "public/**" } }
