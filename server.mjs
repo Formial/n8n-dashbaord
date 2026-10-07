@@ -190,7 +190,7 @@ export function createApp(options = {}) {
         const ref = job.references.find(value => value.id === reference[2]); check(ref, 'Reference not found.', 404); await serveFile(ref.file, ref.mimeType); return;
       }
       if (!['GET', 'HEAD'].includes(req.method) && req.headers.origin) check(req.headers.origin === `http://${req.headers.host}` || req.headers.origin === `https://${req.headers.host}`, 'Cross-origin requests are blocked.', 403);
-      if (req.method === 'GET' && ['/', '/app.js', '/styles.css'].includes(path)) { const file = path === '/' ? 'index.html' : path.slice(1); serve(readFileSync(join(root, 'public', file)), { 'index.html': 'text/html; charset=utf-8', 'app.js': 'text/javascript; charset=utf-8', 'styles.css': 'text/css; charset=utf-8' }[file]); return; }
+      if (req.method === 'GET' && ['/', '/dashboard.js', '/styles.css'].includes(path)) { const file = path === '/' ? 'index.html' : path.slice(1); serve(readFileSync(join(root, 'public', file)), { 'index.html': 'text/html; charset=utf-8', 'dashboard.js': 'text/javascript; charset=utf-8', 'styles.css': 'text/css; charset=utf-8' }[file]); return; }
       if (path === '/api/session' && req.method === 'POST') {
         const body = await json(req), key = String(Math.floor(Date.now() / 60000)), expiresAt = new Date((Number(key) + 2) * 60000); check(await store.consumeLogin(key, expiresAt) <= 10, 'Too many login attempts. Wait one minute.', 429);
         check(!password || safeEqual(body.password, password), 'Incorrect workspace password.', 401); await store.releaseLogin(key);

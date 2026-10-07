@@ -26,7 +26,7 @@ test('Shipped client loads all screens, submits a job, compares/selects candidat
     const response = await fetch(base + path,{...options,headers:{cookie,...options.headers}}); const setCookie = response.headers.get('set-cookie'); if (setCookie) cookie = setCookie.split(';')[0]; return response;
   }});
   const run = code => vm.runInContext(code,context);
-  await run(readFileSync(join(root,'public/app.js'),'utf8'));
+  await run(readFileSync(join(root,'public/dashboard.js'),'utf8'));
   assert(elements.get('#app').innerHTML.includes('<h1>Creative studio</h1>'));
   assert(elements.get('#app').innerHTML.includes('Copy & advanced settings'));
   assert(!elements.get('#app').innerHTML.includes('direction-card'));
