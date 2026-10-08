@@ -83,6 +83,9 @@ export class MongoStorage {
     await collection.createIndex({ app: 1, kind: 1, 'data.createdAt': -1 });
     await collection.createIndex({ expiresAt: 1 }, { name: 'formial_dashboard_expiry', expireAfterSeconds: 0, partialFilterExpression: { app: APP_MARKER } });
     await collection.createIndex({ app: 1, kind: 1, 'data.uploadId': 1, 'data.index': 1 });
+    await collection.createIndex({ app: 1, kind: 1, 'data.file': 1 });
+    await collection.createIndex({ app: 1, kind: 1, 'data.references.file': 1 });
+    await collection.createIndex({ app: 1, kind: 1, 'data.candidates.file': 1 });
     await this.database.collection(this.namespace + '.files').createIndex({ filename: 1 }, { unique: true });
   }
   async list(name) { return (await this.collection(name).find(this.scope(name)).sort({ 'data.createdAt': -1, _id: -1 }).toArray()).map(document => document.data); }

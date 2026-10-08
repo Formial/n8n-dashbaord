@@ -171,8 +171,8 @@ export function createApp(options = {}) {
   async function handler(req, res) {
     const send = (value, status = 200) => { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(value)); };
     const serve = (buffer, mime, name) => { res.writeHead(200, { 'content-type': mime, 'content-length': buffer.length, 'cache-control': 'no-store', ...(name ? { 'content-disposition': `attachment; filename="${name}"` } : {}) }); res.end(buffer); };
-    const serveFile = async (file, mime, name) => { const stream = await store.fileStream(file); res.writeHead(200, { 'content-type': mime, 'cache-control': 'no-store', ...(name ? { 'content-disposition': `attachment; filename="${name}"` } : {}) }); await pipeline(stream, res); };
-    res.setHeader('x-content-type-options', 'nosniff'); res.setHeader('referrer-policy', 'same-origin'); res.setHeader('content-security-policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    const serveFile = async (file, mime, name) => { const stream = await store.fileStream(file); res.writeHead(200, { 'content-type': mime, 'cache-control': name ? 'no-store' : 'public, max-age=86400, immutable', ...(name ? { 'content-disposition': `attachment; filename="${name}"` } : {}) }); await pipeline(stream, res); };
+    res.setHeader('x-content-type-options', 'nosniff'); res.setHeader('referrer-policy', 'same-origin'); res.setHeader('content-security-policy', "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     try {
       await ready;
       const url = new URL(req.url, 'http://localhost'), path = url.pathname, localHost = /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(req.headers.host || ''); check(password || localHost, 'Local-only mode requires a localhost URL.', 403);
@@ -219,11 +219,29 @@ export function createApp(options = {}) {
       const assetDelete = path.match(/^\/api\/assets\/([a-f0-9-]{36})$/); if (assetDelete && req.method === 'DELETE') { check(await store.remove('assets', assetDelete[1]), 'Asset not found.', 404); send({ ok: true }); return; }
       if (path === '/api/presets' && req.method === 'GET') { send(await store.list('presets')); return; }
       if (path === '/api/presets' && req.method === 'POST') { send(await store.insert('presets', { id: id(), brief: validateBrief(await json(req)), createdAt: new Date().toISOString() }), 201); return; }
-      if (path === '/api/jobs' && req.method === 'GET') { const jobs = []; for (const job of await store.list('jobs')) { const current = await expire(job.id), value = publicJob(current); if (store.kind === 'mongodb') value.report = current.report ? { repair_attempted: current.report.repair_attempted } : undefined; jobs.push(value); } send(jobs); return; }
+      if (path === '/api/jobs' && req.method === 'GET') {
+        const list = await store.list('jobs');
+        const jobs = [];
+        for (const job of list) {
+          let current = job;
+          if (!terminal.has(job.status) && Date.now() - Date.parse(job.createdAt) > timeout) {
+            current = (await expire(job.id)) || job;
+          }
+          const value = publicJob(current);
+          if (store.kind === 'mongodb') value.report = current.report ? { repair_attempted: current.report.repair_attempted } : undefined;
+          jobs.push(value);
+        }
+        send(jobs);
+        return;
+      }
       if (path === '/api/jobs' && req.method === 'POST') { send(publicJob(await submit(req, owner)), 202); return; }
       const jobMatch = path.match(/^\/api\/jobs\/([a-f0-9-]{36})(?:\/(revision|decision|selection|report|archive))?$/);
       if (jobMatch) {
-        let job = await expire(jobMatch[1]); check(job, 'Job not found.', 404); const action = jobMatch[2];
+        let job = await store.get('jobs', jobMatch[1]); check(job, 'Job not found.', 404);
+        if (!terminal.has(job.status) && Date.now() - Date.parse(job.createdAt) > timeout) {
+          job = (await expire(job.id)) || job;
+        }
+        const action = jobMatch[2];
         if (!action && req.method === 'GET') { send(publicJob(job)); return; }
         if (action === 'revision' && req.method === 'POST') {
           check(terminal.has(job.status), 'Wait for this job to finish before requesting changes.', 409); const body = await json(req); check(typeof body.changes === 'string' && body.changes.trim().length > 0 && body.changes.length <= 1000, 'Describe changes in 1-1000 characters.');
