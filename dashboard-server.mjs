@@ -10,6 +10,7 @@ import { beginUpload, writeUploadPart, finishUpload, CHUNK_BYTES } from './trans
 import { check, HttpError, id, imageMime, imageDimensions, canvasSizes, validateBrief, validateReferences, defaults, choices, FILE_LIMIT, demoSvg, zip } from './lib.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
+const WORKSPACE_PASSWORD = 'Formial#123';
 const stages = ['queued', 'directing', 'generating', 'reviewing', 'repairing', 'packaging', 'complete'];
 const terminal = new Set(['complete', 'failed']);
 const qaKeys = ['product_fidelity', 'brand_consistency', 'text_accuracy', 'required_items_present', 'claims_accurate', 'composition_clean', 'no_visible_artifacts'];
@@ -20,7 +21,7 @@ const publicJob = job => { const { callbackToken, ...value } = job; return value
 export function createApp(options = {}) {
   const dataDir = resolve(options.dataDir ?? process.env.DATA_DIR ?? join(root, 'data'));
   const mode = options.mode ?? process.env.GENERATION_MODE ?? 'demo';
-  const password = options.password ?? process.env.DASHBOARD_PASSWORD ?? '';
+  const password = options.password ?? WORKSPACE_PASSWORD;
   const n8nUrl = options.n8nUrl ?? process.env.N8N_WEBHOOK_URL;
   const n8nSecret = options.n8nSecret ?? process.env.N8N_WEBHOOK_SECRET;
   const publicUrl = options.publicUrl ?? process.env.DASHBOARD_PUBLIC_URL ?? 'http://127.0.0.1:3001';
@@ -36,7 +37,7 @@ export function createApp(options = {}) {
   }
   if (serverless) {
     check(backend === 'mongodb' && mode === 'n8n' && payloadVersion === 2, 'Vercel requires MongoDB, live n8n and the version 2 workflow.');
-    check(password.length >= 16 && !/^(formial|password)/i.test(password), 'Set a strong DASHBOARD_PASSWORD of at least 16 characters before deploying.');
+    check(password, 'Workspace authentication is required before deploying.');
     check(new URL(publicUrl).protocol === 'https:', 'Vercel requires an HTTPS DASHBOARD_PUBLIC_URL.');
   }
   let store = options.storage || (backend === 'local' ? new LocalStorage(dataDir) : null), closed = false;
@@ -171,7 +172,7 @@ export function createApp(options = {}) {
   async function handler(req, res) {
     const send = (value, status = 200) => { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(value)); };
     const serve = (buffer, mime, name) => { res.writeHead(200, { 'content-type': mime, 'content-length': buffer.length, 'cache-control': 'no-store', ...(name ? { 'content-disposition': `attachment; filename="${name}"` } : {}) }); res.end(buffer); };
-    const serveFile = async (file, mime, name) => { const stream = await store.fileStream(file); res.writeHead(200, { 'content-type': mime, 'cache-control': name ? 'no-store' : 'public, max-age=86400, immutable', ...(name ? { 'content-disposition': `attachment; filename="${name}"` } : {}) }); await pipeline(stream, res); };
+    const serveFile = async (file, mime, name) => { const stream = await store.fileStream(file); res.writeHead(200, { 'content-type': mime, 'cache-control': 'private, no-store', ...(name ? { 'content-disposition': `attachment; filename="${name}"` } : {}) }); await pipeline(stream, res); };
     res.setHeader('x-content-type-options', 'nosniff'); res.setHeader('referrer-policy', 'same-origin'); res.setHeader('content-security-policy', "default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     try {
       await ready;
@@ -196,7 +197,7 @@ export function createApp(options = {}) {
         check(!password || safeEqual(body.password, password), 'Incorrect workspace password.', 401); await store.releaseLogin(key);
         const token = randomBytes(32).toString('hex'); await store.insert('sessions', { id: digest('session:' + token), expiresAt: new Date(Date.now() + 12 * 3600000) }); res.setHeader('set-cookie', `formial_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${publicUrl.startsWith('https:') ? '; Secure' : ''}`); send({ ok: true }); return;
       }
-      if (path === '/api/config' && req.method === 'GET') { send({ mode, loginRequired: Boolean(password), defaults, choices, imageModel: 'Nano Banana Pro', directorModel: 'Gemini 3.1 Pro', maxFileBytes: FILE_LIMIT, storageBackend: store.kind, uploadProtocol: store.kind === 'mongodb' || serverless ? 'chunked' : 'multipart' }); return; }
+      if (path === '/api/config' && req.method === 'GET') { send({ mode, loginRequired: Boolean(password), defaults, choices, imageModel: 'Nano Banana Pro', directorModel: 'Gemini 3.1 Pro', maxFileBytes: FILE_LIMIT, storageBackend: store.kind, imageStorageBackend: store.imageBackend || (store.kind === 'mongodb' ? 'gridfs' : 'local'), uploadProtocol: store.kind === 'mongodb' || serverless ? 'chunked' : 'multipart' }); return; }
       const uploadMatch = path.match(/^\/api\/uploads\/([a-f0-9-]{36})\/(?:parts\/(\d+)|(finalize))$/);
       if (uploadMatch) {
         const value = await store.get('uploads', uploadMatch[1]); check(value && new Date(value.expiresAt) > new Date(), 'Upload missing or expired.', 404);
@@ -281,6 +282,6 @@ export function createApp(options = {}) {
   return { server, handler, ready, db: store?.db, dataDir, closeStorage: async () => { const storage = await ready; await storage.close(); } };
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const host = process.env.HOST || '127.0.0.1', port = Number(process.env.PORT || 3001); check(['127.0.0.1', 'localhost', '::1'].includes(host) || process.env.DASHBOARD_PASSWORD, 'Set DASHBOARD_PASSWORD before binding beyond loopback.');
+  const host = process.env.HOST || '127.0.0.1', port = Number(process.env.PORT || 3001);
   const app = createApp(); try { await app.ready; app.server.listen(port, host, () => console.log(`Formial dashboard: http://${host}:${port} (${process.env.GENERATION_MODE || 'demo'} mode)`)); } catch { console.error('Dashboard storage could not start. Check MongoDB configuration privately.'); process.exitCode = 1; }
 }

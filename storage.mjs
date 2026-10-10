@@ -9,7 +9,7 @@ import { MongoClient, GridFSBucket } from 'mongodb';
 import { check, id } from './lib.mjs';
 
 export const digest = value => createHash('sha256').update(value).digest('hex');
-const collections = ['assets', 'presets', 'jobs', 'sessions', 'loginWindows', 'uploads'];
+const collections = ['assets', 'presets', 'jobs', 'sessions', 'loginWindows', 'uploads', 'driveFiles', 'driveParts'];
 const copy = value => value == null ? value : structuredClone(value);
 const filePattern = /^[a-f0-9-]{36}\.(png|jpg|webp|svg)$/;
 export const APP_MARKER = 'formial-creative-dashboard-v1';
@@ -78,7 +78,7 @@ export class MongoStorage {
   document(name, value, revision = 0) {
     return { ...this.scope(name, value.id), revision, data: copy(value), ...(value.expiresAt ? { expiresAt: new Date(value.expiresAt) } : {}) };
   }
-  async initialize() {
+  async initialize({ imageBackend = 'gridfs' } = {}) {
     const collection = this.collection('jobs');
     await collection.createIndex({ app: 1, kind: 1, 'data.createdAt': -1 });
     await collection.createIndex({ expiresAt: 1 }, { name: 'formial_dashboard_expiry', expireAfterSeconds: 0, partialFilterExpression: { app: APP_MARKER } });
@@ -86,7 +86,7 @@ export class MongoStorage {
     await collection.createIndex({ app: 1, kind: 1, 'data.file': 1 });
     await collection.createIndex({ app: 1, kind: 1, 'data.references.file': 1 });
     await collection.createIndex({ app: 1, kind: 1, 'data.candidates.file': 1 });
-    await this.database.collection(this.namespace + '.files').createIndex({ filename: 1 }, { unique: true });
+    if (imageBackend === 'gridfs') await this.database.collection(this.namespace + '.files').createIndex({ filename: 1 }, { unique: true });
   }
   async list(name) { return (await this.collection(name).find(this.scope(name)).sort({ 'data.createdAt': -1, _id: -1 }).toArray()).map(document => document.data); }
   async get(name, key) { return (await this.collection(name).findOne(this.scope(name, key)))?.data || null; }
@@ -111,6 +111,7 @@ export class MongoStorage {
   }
   async releaseLogin(key) { await this.collection('loginWindows').updateOne({ ...this.scope('loginWindows', key), 'data.count': { $gt: 0 } }, { $inc: { 'data.count': -1 } }); }
   async putFile(bytes, extension, filename = `${id()}.${extension}`) {
+    if (this.images) return this.images.putFile(bytes, extension, filename);
     check(filePattern.test(filename), 'Invalid file name.');
     const existing = await this.fileInfo(filename);
     if (existing) { check(existing.metadata?.sha256 === digest(bytes), 'File already exists with different bytes.', 409); return filename; }
@@ -119,13 +120,14 @@ export class MongoStorage {
     catch (error) { await stream.abort().catch(() => {}); throw error; }
     return filename;
   }
-  async fileInfo(file) { if (!filePattern.test(file)) return null; const value = await this.bucket.find({ filename: file }).next(); return value && { ...value, size: value.length }; }
-  async fileStream(file) { const info = await this.fileInfo(file); check(info, 'File not found.', 404); return this.bucket.openDownloadStream(info._id); }
-  async readFile(file) { const stream = await this.fileStream(file), chunks = []; for await (const chunk of stream) chunks.push(chunk); return Buffer.concat(chunks); }
+  async fileInfo(file) { if (!filePattern.test(file)) return null; if (this.images && (await this.get('driveFiles', file))?.state === 'ready') return this.images.fileInfo(file); const value = await this.bucket.find({ filename: file }).next(); return value && { ...value, size: value.length }; }
+  async fileStream(file) { if (this.images && (await this.get('driveFiles', file))?.state === 'ready') return this.images.fileStream(file); const info = await this.fileInfo(file); check(info, 'File not found.', 404); return this.bucket.openDownloadStream(info._id); }
+  async readFile(file) { if (this.images && (await this.get('driveFiles', file))?.state === 'ready') return this.images.readFile(file); const stream = await this.fileStream(file), chunks = []; for await (const chunk of stream) chunks.push(chunk); return Buffer.concat(chunks); }
   async knownFile(file) {
     return Boolean(await this.collection('assets').findOne({ ...this.scope('assets'), 'data.file': file }, { projection: { _id: 1 } }) || await this.collection('jobs').findOne({ ...this.scope('jobs'), $or: [{ 'data.references.file': file }, { 'data.candidates.file': file }] }, { projection: { _id: 1 } }));
   }
   async putPart(uploadId, index, bytes, expiresAt) {
+    if (this.images) return this.images.putPart(uploadId, index, bytes, expiresAt);
     const parts = this.database.collection(this.namespace), key = this.scope('uploadPart', uploadId + '/' + index);
     try { await parts.insertOne({ ...key, data: { uploadId, index, hash: digest(bytes), bytes }, expiresAt }); }
     catch (error) {
@@ -134,20 +136,27 @@ export class MongoStorage {
     }
   }
   async readParts(uploadId) {
+    if (this.images) return this.images.readParts(uploadId);
     return (await this.database.collection(this.namespace).find({ ...this.scope('uploadPart'), 'data.uploadId': uploadId }).sort({ 'data.index': 1 }).toArray()).map(value => ({ ...value.data, bytes: Buffer.from(value.data.bytes.buffer) }));
   }
-  async clearParts(uploadId) { await this.database.collection(this.namespace).deleteMany({ ...this.scope('uploadPart'), 'data.uploadId': uploadId }); }
+  async clearParts(uploadId) { if (this.images) return this.images.clearParts(uploadId); await this.database.collection(this.namespace).deleteMany({ ...this.scope('uploadPart'), 'data.uploadId': uploadId }); }
   async close() { await this.client.close(); }
 }
 
-export async function connectMongo(uri, databaseName = 'formial', namespace = 'creatives-n8n') {
+export async function connectMongo(uri, databaseName = 'formial', namespace = 'creatives-n8n', options = {}) {
   check(typeof uri === 'string' && /^mongodb(?:\+srv)?:\/\//.test(uri), 'Set a valid MONGODB_URI privately in .env.');
   check(/^[A-Za-z0-9_-]{1,63}$/.test(databaseName), 'Invalid MONGODB_DATABASE.');
   check(/^[A-Za-z0-9_-]{1,63}$/.test(namespace), 'Invalid MONGODB_COLLECTION.');
+  const imageBackend = options.imageBackend ?? process.env.IMAGE_STORAGE_BACKEND ?? 'gridfs';
+  check(['gridfs', 'drive'].includes(imageBackend), 'IMAGE_STORAGE_BACKEND must be gridfs or drive.');
   const servers = mongoDnsServers(process.env.MONGODB_DNS_SERVERS);
   // This override is scoped to the Node.js process; Windows DNS stays unchanged.
   if (servers.length) dns.setServers(servers);
   const client = new MongoClient(uri, { maxPoolSize: 5, minPoolSize: 0, maxIdleTimeMS: 60000, serverSelectionTimeoutMS: 10000, waitQueueTimeoutMS: 10000, retryWrites: true });
-  try { await client.connect(); const store = new MongoStorage(client, client.db(databaseName), namespace); await store.initialize(); return store; }
+  let store;
+  try { await client.connect(); store = new MongoStorage(client, client.db(databaseName), namespace); await store.initialize({ imageBackend }); }
   catch (error) { await client.close(); throw new Error('MongoDB connection failed. Check the private URI, database user permissions and Atlas network access.'); }
+  store.imageBackend = imageBackend;
+  if (imageBackend === 'drive') { try { const { configureDriveImages } = await import('./drive-images.mjs'); configureDriveImages(store, options.drive); } catch (error) { await client.close(); throw error; } }
+  return store;
 }

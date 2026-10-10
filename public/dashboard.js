@@ -356,8 +356,20 @@ document.addEventListener('keydown', e => { if (['Enter',' '].includes(e.key) &&
 dialog.addEventListener('click', e => { if (e.target === dialog) { const r = dialog.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dialog.close(); } });
 function login() {
   state.page = 'login'; viewVersion++;
-  clearTimeout(poll); app.innerHTML = `<div class="login"><div class="panel"><div class="brand"><span class="brand-text">FORMIAL<span>LABS</span></span><small>CREATIVE STUDIO</small></div><h2>Your creative workspace.</h2><form id="login-form"><div class="field"><label for="password">Workspace password</label><input id="password" name="password" type="password" autocomplete="current-password" required></div><p id="login-error" class="form-error" role="alert"></p><button class="button primary" type="submit">Sign in ${icon('arrow')}</button></form></div></div>`;
-  $('#login-form').addEventListener('submit', async e => { e.preventDefault(); try { await post('session',{password:$('#password').value}); await refresh(); state.page = 'studio'; await restoreRoute(true); } catch(err) { $('#login-error').textContent = err.message; } });
+  clearTimeout(poll);
+  app.innerHTML = `<main class="login login-workspace"><section class="login-shell" aria-labelledby="login-title"><div class="brand"><span class="brand-text">FORMIAL<span>LABS</span></span></div><p class="login-kicker">Creative studio</p><h1 id="login-title">Sign in</h1><form id="login-form"><div class="field"><label for="password">Workspace password</label><input id="password" name="password" type="password" autocomplete="current-password" aria-describedby="login-error" required></div><label class="login-options" for="show-password"><input id="show-password" type="checkbox">Show password</label><p id="login-error" class="form-error" role="alert" aria-live="polite"></p><button id="login-submit" class="button primary" type="submit">Sign in ${icon('arrow')}</button></form><footer class="login-footer"><a href="https://formial.in" target="_blank" rel="noopener noreferrer">formial.in</a></footer></section></main>`;
+  const form = $('#login-form'), passwordInput = $('#password'), error = $('#login-error'), submitButton = $('#login-submit');
+  let signingIn = false;
+  $('#show-password').addEventListener('change', e => { passwordInput.type = e.target.checked ? 'text' : 'password'; });
+  passwordInput.addEventListener('input', () => { error.textContent = ''; passwordInput.removeAttribute('aria-invalid'); });
+  form.addEventListener('submit', async e => {
+    e.preventDefault(); if (signingIn) return;
+    signingIn = true; error.textContent = ''; submitButton.disabled = true; form.setAttribute('aria-busy', 'true'); submitButton.textContent = 'Signing in...';
+    try { await post('session', { password: passwordInput.value }); await refresh(); state.page = 'studio'; await restoreRoute(true); }
+    catch (err) { error.textContent = err.message; passwordInput.setAttribute('aria-invalid', 'true'); passwordInput.focus(); }
+    finally { signingIn = false; submitButton.disabled = false; form.removeAttribute('aria-busy'); submitButton.innerHTML = `Sign in ${icon('arrow')}`; }
+  });
+  passwordInput.focus();
 }
 async function init() {
   config = await api('config'); draft = {...config.defaults};

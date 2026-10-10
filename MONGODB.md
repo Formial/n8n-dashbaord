@@ -40,10 +40,9 @@ Use the dashboard directory as the Vercel project root. The Node.js API entry is
 | `N8N_WEBHOOK_URL` | New workflow's Production URL |
 | `N8N_WEBHOOK_SECRET` | Same secret as its Webhook credential |
 | `DASHBOARD_PUBLIC_URL` | Your production HTTPS dashboard origin |
-| `DASHBOARD_PASSWORD` | Strong unique password, at least 16 characters |
 | `JOB_TIMEOUT_MINUTES` | `65` |
 
-The deployment rejects local storage, the old payload protocol, demo mode and weak passwords. Job dispatch is awaited before the serverless response, with no automatic generation retries. Shared MongoDB sessions and compare-and-swap updates prevent different instances overwriting one another's job state.
+The deployment rejects local storage, the old payload protocol, demo mode and disabled authentication. The shared password is fixed in the server source; no `DASHBOARD_PASSWORD` environment variable is needed. Repository readers can see this password. Job dispatch is awaited before the serverless response, with no automatic generation retries. Shared MongoDB sessions and compare-and-swap updates prevent different instances overwriting one another's job state.
 
 Vercel deployment protection must allow authenticated application callbacks to reach the API; an extra Vercel login screen in front of callbacks will block n8n. Do not remove the dashboard's own authentication. Verify API routing, streamed image/ZIP downloads and callbacks on a deployed preview before declaring production ready. Those deployment checks cannot be confirmed from local tests.
 

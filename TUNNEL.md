@@ -4,7 +4,7 @@ The dashboard uses Cloudflare Quick Tunnel for testing, not permanent hosting.
 Its generated URL stops working when the tunnel process stops and changes on
 each restart. Keep the laptop awake and online.
 
-The dashboard password is in `.env`, under `DASHBOARD_PASSWORD`. Never share the
+The dashboard uses a fixed server-side password; it does not read `DASHBOARD_PASSWORD`. Never share the
 webhook secret or Google API key. Only the dashboard password is used to log in.
 
 ## Start
@@ -36,7 +36,7 @@ specific test instance if it was started in the background.
 
 ## Where values go
 
-- Dashboard login: the `.env` value `DASHBOARD_PASSWORD`.
+- Dashboard login: the fixed server-side workspace password.
 - n8n Dashboard Webhook credential: header `x-formial-secret`, value from
   `.env` `N8N_WEBHOOK_SECRET`.
 - All five Gemini nodes: header `x-goog-api-key`, raw Google AI Studio API key.

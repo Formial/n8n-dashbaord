@@ -23,7 +23,8 @@ export async function writeUploadPart(store, upload, index, bytes) {
 }
 export async function finishUpload(store, upload) {
   const describe = value => ({ uploadId: value.id, file: value.file, name: value.name, size: value.size, mimeType: value.mimeType });
-  if (upload.state === 'ready') return describe(upload);
+  const cleanParts = async () => { try { await store.clearParts(upload.id); } catch { console.error('Temporary upload cleanup deferred; the verified image is retained.'); } };
+  if (upload.state === 'ready') { await cleanParts(); return describe(upload); }
   const claim = id();
   const claimed = await store.mutate('uploads', upload.id, value => {
     check(value.state === 'pending' || value.state === 'assembling' && Date.parse(value.leaseUntil) < Date.now(), 'Upload is already being finalized.', 409);
@@ -37,7 +38,7 @@ export async function finishUpload(store, upload) {
     check(bytes.length === upload.size && imageMime(bytes) === upload.mimeType, 'Image signature does not match the upload.');
     await store.putFile(bytes, upload.file.split('.').at(-1), upload.file);
     const result = await store.mutate('uploads', upload.id, value => { check(value.claim === claim, 'Upload claim expired.', 409); value.state = 'ready'; delete value.claim; delete value.leaseUntil; });
-    await store.clearParts(upload.id); return describe(result);
+    await cleanParts(); return describe(result);
   } catch (error) {
     await store.mutate('uploads', upload.id, value => { if (value.claim !== claim) return false; value.state = 'pending'; delete value.claim; delete value.leaseUntil; });
     throw error;

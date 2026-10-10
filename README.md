@@ -1,5 +1,7 @@
 # Formial creative dashboard
 
+Optional private Google Drive image storage: see [GOOGLE-DRIVE.md](GOOGLE-DRIVE.md). MongoDB remains the metadata database; Drive can store image bytes and upload parts. Existing images are preserved until a verified migration.
+
 MongoDB and Vercel migration: see [MONGODB.md](MONGODB.md). The target is `formial.creatives-n8n`, with GridFS companion collections for images. Keep local storage active until the private Atlas connection and migration are verified.
 
 A local creative workspace with a server backend and an asynchronous n8n integration. Includes validated uploads with previews and reference roles, saved brand assets, reusable campaign briefs, generation progress, candidate comparison and selection, individual/report/ZIP downloads, human decisions, persistent history, and explicit revisions that preserve previous jobs.
@@ -34,7 +36,7 @@ The default workflow uses Gemini 3.1 Pro for direction/review and Nano Banana Pr
 
 ## Storage and access
 
-- Local-only by default. Binding beyond loopback requires `DASHBOARD_PASSWORD`; use HTTPS for remote access. A shared workspace login has an HttpOnly, SameSite=Strict session cookie and a 12-hour session lifetime. No roles or individual accounts are implemented.
+- A shared workspace login uses a fixed server-side password in `dashboard-server.mjs`; `DASHBOARD_PASSWORD` is no longer read. Anyone with access to the server source can see this shared password. Use HTTPS for remote access. Sessions use an HttpOnly, SameSite=Strict cookie with a 12-hour lifetime. No roles or individual accounts are implemented.
 - Assets, references, generated files, briefs and reports are stored on this server. Back up `data/` as a unit. This is a single-process local application with atomic JSON persistence, not a distributed service.
 - Each upload is at most 5 MiB, with 8 MiB total per job. Main reference: exactly one; product/item photos: up to three each; logo: up to one. The browser decodes selected images; the server and workflow validate file signatures. Server signature validation is not a full image decoder.
 - Jobs have UUIDs and private random callback tokens. Callback tokens and n8n credentials never appear in public job responses or downloads. Progress cannot move backward; terminal results cannot be overwritten by replayed callbacks.

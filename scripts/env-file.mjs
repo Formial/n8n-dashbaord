@@ -20,3 +20,18 @@ export function updateRuntimeEnv(source, updates) {
   for (const key of remaining) lines.push(`${key}=${updates[key]}`);
   return lines.join('\n') + '\n';
 }
+
+export function updateDriveSecrets(source, updates) {
+  const allowed = ['GOOGLE_DRIVE_REFRESH_TOKEN', 'GOOGLE_DRIVE_FOLDER_ID'];
+  for (const [key, value] of Object.entries(updates)) {
+    if (!allowed.includes(key) || typeof value !== 'string' || !value || /[\r\n"\\]/.test(value)) throw new Error('Invalid private Google Drive setting.');
+  }
+  const remaining = new Set(Object.keys(updates));
+  const lines = source.trimEnd().split(/\r?\n/).map(line => {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+    if (!match || !Object.hasOwn(updates, match[1])) return line;
+    remaining.delete(match[1]); return `${match[1]}="${updates[match[1]]}"`;
+  });
+  for (const key of remaining) lines.push(`${key}="${updates[key]}"`);
+  return lines.join('\n') + '\n';
+}

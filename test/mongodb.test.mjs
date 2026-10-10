@@ -9,6 +9,7 @@ import { connectMongo, digest, APP_MARKER } from '../storage.mjs';
 import { createApp } from '../dashboard-server.mjs';
 import { CHUNK_BYTES } from '../transfers.mjs';
 import { defaults } from '../lib.mjs';
+import { Readable } from 'node:stream';
 import { png, review } from './fixtures.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -19,6 +20,37 @@ before(async () => {
   secondStore = await connectMongo(mongo.getUri(), 'formial_test');
 });
 after(async () => { await firstStore?.close(); await secondStore?.close(); await mongo?.stop(); });
+
+test('Drive-backed MongoDB stores no new image or part bytes and preserves legacy GridFS images', async t => {
+  const legacy = await connectMongo(mongo.getUri(), 'formial_drive_test', 'creatives-n8n', { imageBackend: 'gridfs' }); t.after(() => legacy.close());
+  const original = png(), oldFile = await legacy.putFile(original, 'png');
+  const initialChunks = await legacy.database.collection('creatives-n8n.chunks').countDocuments();
+  const files = new Map(); let serial = 0;
+  const client = {
+    upload: async (bytes, name, mimeType, key, type) => {
+      const info = { id: 'fake-drive-' + (++serial), size: String(bytes.length), sha256Checksum: digest(bytes), key, type };
+      files.set(info.id, { ...info, bytes: Buffer.from(bytes), mimeType }); return info;
+    },
+    metadata: async key => files.get(key),
+    assertOwned: (info, key, type) => { assert.equal(info.key, key); assert.equal(info.type, type); },
+    stream: async info => Readable.from([files.get(info.id).bytes]),
+    read: async info => Buffer.from(files.get(info.id).bytes),
+    trashPart: async (info, key) => { assert.equal(files.get(info.id).key, key); files.get(info.id).trashed = true; },
+  };
+  const store = await connectMongo(mongo.getUri(), 'formial_drive_test', 'creatives-n8n', { imageBackend: 'drive', drive: { client } }); t.after(() => store.close());
+  assert((await store.readFile(oldFile)).equals(original), 'Legacy image remains readable before migration');
+  const bytes = Buffer.concat([png(), Buffer.alloc(CHUNK_BYTES + 17)]), file = await store.putFile(bytes, 'png');
+  assert((await store.readFile(file)).equals(bytes));
+  const uploadId = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+  await store.putPart(uploadId, 0, bytes.subarray(0, CHUNK_BYTES), new Date(Date.now() + 60000));
+  const parts = await store.readParts(uploadId); assert(parts[0].bytes.equals(bytes.subarray(0, CHUNK_BYTES)));
+  const metadata = await store.list('driveParts'); assert(metadata.every(value => !value.bytes && !value.data));
+  assert.equal(await store.collection('uploads').countDocuments({ app: APP_MARKER, kind: 'uploadPart' }), 0);
+  assert.equal(await store.database.collection('creatives-n8n.chunks').countDocuments(), initialChunks);
+  await store.putFile(original, 'png', oldFile); assert((await store.readFile(oldFile)).equals(original));
+  assert.equal(await store.database.collection('creatives-n8n.chunks').countDocuments(), initialChunks);
+  await store.clearParts(uploadId); assert.equal((await store.list('driveParts')).length, 0);
+});
 
 test('Real MongoDB keeps concurrent updates, GridFS image bytes, sessions and TTL indexes across instances', async () => {
   const legacy = { _id: 'existing-unrelated-creative', description: 'Existing record', expiresAt: new Date(0) };

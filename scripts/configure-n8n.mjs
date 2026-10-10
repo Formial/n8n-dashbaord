@@ -53,10 +53,8 @@ try {
   const webhookSecret = existing.N8N_WEBHOOK_SECRET && !existing.N8N_WEBHOOK_SECRET.startsWith('replace-')
     ? existing.N8N_WEBHOOK_SECRET
     : randomBytes(32).toString('hex');
-  const dashboardPassword = existing.DASHBOARD_PASSWORD || (location === 'local' ? '' : randomBytes(18).toString('base64url'));
   const updates = { GENERATION_MODE: 'n8n', HOST: host, PORT: existing.PORT || '3001', N8N_WEBHOOK_URL: webhook, DASHBOARD_PUBLIC_URL: publicUrl, JOB_TIMEOUT_MINUTES: existing.JOB_TIMEOUT_MINUTES || '65' };
   if (webhookSecret !== existing.N8N_WEBHOOK_SECRET) updates.N8N_WEBHOOK_SECRET = webhookSecret;
-  if (dashboardPassword && !existing.DASHBOARD_PASSWORD) updates.DASHBOARD_PASSWORD = dashboardPassword;
   const content = updateRuntimeEnv(source, updates);
   writeFileSync(envPath, content, { encoding: 'utf8', mode: 0o600 });
 
@@ -70,7 +68,7 @@ try {
   stdout.write('   Header value: your raw Google AI Studio API key\n');
   stdout.write('   Select it in Creative Director, Generate Candidates, Inspect Candidates, Repair Candidate and Inspect Repair.\n\n');
   stdout.write('3. Activate the workflow, then restart the dashboard with npm.cmd start.\n');
-  if (dashboardPassword) stdout.write(`\nDashboard login password: ${dashboardPassword}\nStore it in your password manager.\n`);
+  stdout.write('\nDashboard login uses the fixed server-side workspace password.\n');
 } finally {
   rl.close();
 }

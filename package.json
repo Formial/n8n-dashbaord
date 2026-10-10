@@ -14,10 +14,14 @@
     "workflow": "node scripts/adapt-workflow.mjs",
     "workflow:mongodb": "node scripts/adapt-mongodb-workflow.mjs",
     "db:check": "node --env-file-if-exists=.env scripts/check-mongodb.mjs",
-    "db:migrate": "node --env-file-if-exists=.env scripts/migrate-mongodb.mjs"
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate-mongodb.mjs",
+    "drive:authorize": "node scripts/authorize-drive.mjs",
+    "drive:check": "node --env-file-if-exists=.env scripts/check-drive.mjs",
+    "drive:migrate": "node --env-file-if-exists=.env scripts/migrate-drive.mjs"
   },
   "dependencies": {
     "archiver": "^8.0.0",
+    "google-auth-library": "^11.2.0",
     "mongodb": "^7.7.0"
   },
   "devDependencies": {

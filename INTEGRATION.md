@@ -112,4 +112,4 @@ Callback replay cannot overwrite completed/failed jobs. Expired jobs reject late
 
 ## Operational scope
 
-Use one dashboard process, start with one generation at a time, and apply n8n execution-retention limits. n8n executions can contain uploaded images, generated base64 and callback tokens; restrict editor access. Remote deployment requires HTTPS and `DASHBOARD_PASSWORD`; per-user authorization, distributed persistence, a production queue, audit export and retention controls are future work. This implementation runs locally without those services.
+Use one dashboard process, start with one generation at a time, and apply n8n execution-retention limits. n8n executions can contain uploaded images, generated base64 and callback tokens; restrict editor access. Remote deployment requires HTTPS and the server-side workspace login; `DASHBOARD_PASSWORD` is no longer used. Per-user authorization, a production queue, audit export and retention controls are future work.

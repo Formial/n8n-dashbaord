@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import http from 'node:http';
 import { once } from 'node:events';
 import { createApp } from '../dashboard-server.mjs';
+import { LocalStorage } from '../storage.mjs';
 import { defaults, crc32 } from '../lib.mjs';
 import { png, review } from './fixtures.mjs';
 
@@ -17,7 +18,7 @@ async function harness(options = {}) {
     const res = await fetch(base + path,{method,headers:{cookie,...(body && !(body instanceof FormData) ? {'content-type':'application/json'} : {}),...headers},body:body ? body instanceof FormData ? body : JSON.stringify(body) : undefined});
     return res;
   }
-  async function login(password = '') { const res = await request('/api/session',{password},'POST'); cookie = res.headers.get('set-cookie')?.split(';')[0] || ''; return res; }
+  async function login(password = 'Formial#123') { const res = await request('/api/session',{password},'POST'); cookie = res.headers.get('set-cookie')?.split(';')[0] || ''; return res; }
   async function close() { app.server.closeAllConnections(); await new Promise(r => app.server.close(r)); }
   return { ...app, base, request, login, close };
 }
@@ -82,6 +83,30 @@ test('Workspace password, rate-limited sign-in, Unicode credentials, cookie attr
   assert.equal((await h.login('wrong')).status,401); const res = await h.login('workspace-安全-password'); assert.equal(res.status,200); assert(res.headers.get('set-cookie').includes('HttpOnly')); assert(res.headers.get('set-cookie').includes('SameSite=Strict'));
   assert.equal((await h.request('/api/jobs')).status,200); await h.request('/api/logout',{},'POST'); assert.equal((await h.request('/api/jobs')).status,401);
   for (let i = 0; i < 9; i++) assert.equal((await h.login('wrong')).status,401); assert.equal((await h.login('wrong')).status,429);
+});
+
+test('Fixed server-side password ignores the old environment variable and stays out of public responses', async t => {
+  const previous = process.env.DASHBOARD_PASSWORD;
+  process.env.DASHBOARD_PASSWORD = 'ignored-environment-password';
+  t.after(() => { if (previous === undefined) delete process.env.DASHBOARD_PASSWORD; else process.env.DASHBOARD_PASSWORD = previous; });
+  const h = await harness(); t.after(h.close);
+  assert.equal((await h.login('')).status, 401);
+  assert.equal((await h.login('ignored-environment-password')).status, 401);
+  assert.equal((await h.login('Formial#123')).status, 200);
+  assert.equal((await h.request('/api/jobs')).status, 200);
+  for (const route of ['/api/config', '/dashboard.js', '/']) {
+    const text = await (await h.request(route)).text();
+    assert(!text.includes('Formial#123'));
+    assert(!text.includes('ignored-environment-password'));
+  }
+  assert.equal((await h.request('/api/logout', {}, 'POST')).status, 200);
+  assert.equal((await h.request('/api/jobs')).status, 401);
+});
+
+test('Vercel uses the fixed password without an environment variable but refuses disabled authentication', async () => {
+  const options = { storage: new LocalStorage(mkdtempSync(join(tmpdir(), 'formial-vercel-login-'))), backend: 'mongodb', mode: 'n8n', payloadVersion: 2, serverless: true, n8nUrl: 'https://example.invalid/webhook', n8nSecret: 'test-only-secret', publicUrl: 'https://example.invalid' };
+  const app = createApp(options); await app.ready; await app.closeStorage();
+  assert.throws(() => createApp({ ...options, password: '' }), /authentication is required/);
 });
 
 test('Live integration contract: authenticated asynchronous dispatch, callbacks, dimension checks, failure, replay and secret isolation', async t => {

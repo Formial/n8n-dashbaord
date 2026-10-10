@@ -2,7 +2,6 @@ import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes } from 'node:crypto';
 import net from 'node:net';
 import { parseEnv, updateRuntimeEnv } from './env-file.mjs';
 
@@ -12,7 +11,6 @@ const client = join(root, '.tools', 'cloudflared.exe');
 if (!existsSync(client)) throw new Error('Missing .tools/cloudflared.exe. Download it from the official Cloudflare downloads page.');
 const source = readFileSync(envPath, 'utf8');
 const values = parseEnv(source);
-const hadPassword = Boolean(values.DASHBOARD_PASSWORD);
 const mode = process.argv.includes('--live') ? 'n8n' : 'demo';
 const port = Number(process.argv.find(arg => arg.startsWith('--port='))?.slice(7) || values.PORT || 3001);
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Choose a port between 1024 and 65535.');
@@ -26,11 +24,9 @@ if (!values.N8N_WEBHOOK_SECRET || !values.N8N_WEBHOOK_URL) throw new Error('Conf
 values.HOST = '127.0.0.1';
 values.PORT = String(port);
 values.GENERATION_MODE = mode;
-values.DASHBOARD_PASSWORD ||= randomBytes(24).toString('base64url');
 values.DASHBOARD_PUBLIC_URL = localUrl;
 const persist = () => {
   const updates = Object.fromEntries(['HOST', 'PORT', 'GENERATION_MODE', 'DASHBOARD_PUBLIC_URL'].map(key => [key, values[key]]));
-  if (!hadPassword) updates.DASHBOARD_PASSWORD = values.DASHBOARD_PASSWORD;
   writeFileSync(envPath, updateRuntimeEnv(source, updates), { mode: 0o600 });
 };
 persist();
@@ -95,7 +91,7 @@ try {
   persist();
   await startDashboard();
   record('Dashboard HTTPS URL: ' + publicUrl);
-  record('Mode: ' + mode + '. Login password is in .env under DASHBOARD_PASSWORD.');
+  record('Mode: ' + mode + '. Login uses the fixed server-side workspace password.');
   record('Keep this process running. The temporary URL changes on each restart.');
   tunnel.on('exit', code => {
     if (!stopping) { record('Tunnel stopped: ' + code); shutdown().then(() => process.exit(1)); }
